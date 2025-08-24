@@ -37,12 +37,21 @@ async def estimate_tickets_endpoint(
 ):
     if not 0.0 <= fill_ratio <= 1.0:
         raise HTTPException(status_code=400, detail="Fill ratio must be between 0 and 1.")
-    # Enhanced estimation logic
-    correction_factor = 0.98  # Account for packing density, calibration
-    estimated = int(round(fill_ratio * total_tickets * correction_factor))
-    estimated = max(0, min(estimated, total_tickets))
-    # Optionally, log for calibration
-    print(f"[ESTIMATE] fill_ratio={fill_ratio}, total_tickets={total_tickets}, estimated={estimated}")
+    # Advanced estimation logic
+    # Minimum threshold to avoid zero unless truly empty
+    min_fill = 0.01
+    fill = max(fill_ratio, min_fill)
+    # Adaptive correction factor: lower for low fill, higher for high fill
+    if fill < 0.05:
+        correction_factor = 0.90
+    elif fill > 0.95:
+        correction_factor = 1.02
+    else:
+        correction_factor = 0.98
+    estimated = int(round(fill * total_tickets * correction_factor))
+    estimated = max(1, min(estimated, total_tickets))
+    # Log for calibration
+    print(f"[ESTIMATE] fill_ratio={fill_ratio}, used_fill={fill}, total_tickets={total_tickets}, correction={correction_factor}, estimated={estimated}")
     return {"estimated_tickets": estimated}
 
 @app.post("/ocr_prize_board", response_model=GameState)

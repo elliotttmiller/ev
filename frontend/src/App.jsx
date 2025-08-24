@@ -43,7 +43,7 @@ export default function App() {
   const [crop, setCrop] = useState({ unit: '%', x: 25, y: 25, width: 50, height: 50 });
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
   const [showCropper, setShowCropper] = useState(false);
-  const [imageRef, setImageRef] = useState(null);
+  const imageRef = useRef(null);
 
   // --- Handler Functions ---
   const updateGameState = (newData) => setGameState(prevState => ({ ...prevState, ...newData }));
@@ -55,7 +55,7 @@ export default function App() {
       setCroppedBoxImage(null);
       setCaliper({ y: 0, isDragging: false });
       setShowCropper(true);
-      setImageRef(null);
+      imageRef.current = null;
       // Center crop with aspect ratio (optional)
       setCrop({ unit: '%', x: 25, y: 25, width: 50, height: 50 });
       setCroppedAreaPixels(null);
@@ -67,7 +67,7 @@ export default function App() {
     setCroppedBoxImage(null);
   };
   const onImageLoaded = (img) => {
-    setImageRef(img);
+    imageRef.current = img;
     // Optionally center crop with aspect ratio
     // const aspect = 1; // For square crop
     // setCrop(centerCrop(makeAspectCrop({ unit: '%', width: 90 }, aspect, img.naturalWidth, img.naturalHeight), img.naturalWidth, img.naturalHeight));
@@ -89,14 +89,21 @@ export default function App() {
   };
 
   // Crop image utility
-  const getCroppedImg = (image, crop) => {
+  // Crop image utility with high quality output
+  const getCroppedImg = (image, crop, zoom = 2) => {
     if (!crop || !image) return null;
-    const canvas = document.createElement('canvas');
+    // Use natural size for cropping
     const scaleX = image.naturalWidth / image.width;
     const scaleY = image.naturalHeight / image.height;
-    canvas.width = crop.width;
-    canvas.height = crop.height;
+    // Output at higher resolution (zoom factor)
+    const outputWidth = Math.round(crop.width * scaleX * zoom);
+    const outputHeight = Math.round(crop.height * scaleY * zoom);
+    const canvas = document.createElement('canvas');
+    canvas.width = outputWidth;
+    canvas.height = outputHeight;
     const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(
       image,
       crop.x * scaleX,
@@ -105,17 +112,18 @@ export default function App() {
       crop.height * scaleY,
       0,
       0,
-      crop.width,
-      crop.height
+      outputWidth,
+      outputHeight
     );
     return new Promise((resolve) => {
-      canvas.toBlob((blob) => { resolve(blob); }, 'image/jpeg');
+      canvas.toBlob((blob) => { resolve(blob); }, 'image/jpeg', 0.95);
     });
   };
 
   const handleCropConfirm = async () => {
-    if (!croppedAreaPixels || !imageRef) return setError('Crop area or image not loaded.');
-    const croppedBlob = await getCroppedImg(imageRef, croppedAreaPixels);
+    if (!croppedAreaPixels || !imageRef.current) return setError('Crop area or image not loaded.');
+    // Use zoom=2 for higher quality, can be adjusted or made user-configurable
+    const croppedBlob = await getCroppedImg(imageRef.current, croppedAreaPixels, 2);
     if (!croppedBlob) return setError('Failed to crop image.');
     setCroppedBoxImage(URL.createObjectURL(croppedBlob));
     setShowCropper(false);
@@ -224,13 +232,19 @@ export default function App() {
             <ReactCrop
               crop={crop}
               onChange={setCrop}
-              onComplete={onCropComplete}
+              onComplete={c => setCroppedAreaPixels(c)}
               keepSelection={true}
               minWidth={10}
               minHeight={10}
               style={{ maxHeight: 400, maxWidth: 400 }}
             >
-              <img src={originalBoxImage} onLoad={onImageLoaded} alt="Crop" style={{ maxHeight: 400, maxWidth: 400 }} />
+              <img
+                src={originalBoxImage}
+                ref={el => { imageRef.current = el; }}
+                onLoad={onImageLoaded}
+                alt="Crop"
+                style={{ maxHeight: 400, maxWidth: 400 }}
+              />
             </ReactCrop>
             <button className="button" style={{ marginTop: '1rem', marginRight: 8 }} onClick={handleCropConfirm}>Confirm Crop</button>
             <button className="button" style={{ marginTop: '1rem' }} onClick={handleCropCancel}>Cancel</button>
